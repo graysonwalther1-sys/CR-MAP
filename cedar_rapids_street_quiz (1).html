@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cedar Rapids Street Quiz</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    min-height: 100vh;
+    padding: 1.5rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 500;
+    margin-bottom: 1.25rem;
+    color: #1a1a1a;
+  }
+
+  .container { max-width: 680px; margin: 0 auto; }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 1rem;
+  }
+  .stat {
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 10px;
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+  }
+  .stat-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+  .stat-val { font-size: 20px; font-weight: 500; }
+
+  /* Tier bar */
+  .tier-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0.75rem;
+  }
+  .tier-badge {
+    padding: 3px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .t-major      { background: #B5D4F4; color: #0C447C; }
+  .t-secondary  { background: #C0DD97; color: #27500A; }
+  .t-residential{ background: #D3D1C7; color: #444441; }
+  .prog-wrap { flex: 1; height: 5px; background: #e0ddd5; border-radius: 3px; }
+  .prog-fill { height: 5px; background: #378ADD; border-radius: 3px; transition: width 0.4s; }
+  .prog-text { font-size: 12px; color: #888; white-space: nowrap; }
+
+  /* Map */
+  #map {
+    width: 100%;
+    height: 380px;
+    border-radius: 12px;
+    border: 0.5px solid #ddd;
+    margin-bottom: 1rem;
+    z-index: 0;
+  }
+
+  /* Question box */
+  .question-box {
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .question-text { font-size: 14px; color: #666; margin-bottom: 0.75rem; }
+
+  /* Multiple choice */
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opt-btn {
+    padding: 10px 12px;
+    border: 0.5px solid #ccc;
+    border-radius: 8px;
+    background: transparent;
+    color: #1a1a1a;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    line-height: 1.4;
+    transition: background 0.1s;
+  }
+  .opt-btn:hover:not(:disabled) { background: #f5f4f0; }
+  .opt-btn:disabled { cursor: default; }
+  .opt-correct { border-color: #1D9E75 !important; color: #085041 !important; background: #E1F5EE !important; }
+  .opt-wrong   { border-color: #D85A30 !important; color: #993C1D !important; background: #FAECE7 !important; }
+
+  /* Type-in */
+  .type-row { display: flex; gap: 8px; }
+  #type-input {
+    flex: 1;
+    padding: 9px 13px;
+    border: 0.5px solid #ccc;
+    border-radius: 8px;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    font-size: 14px;
+    outline: none;
+  }
+  #type-input:focus { border-color: #378ADD; }
+  #type-submit {
+    padding: 9px 18px;
+    border: 0.5px solid #ccc;
+    border-radius: 8px;
+    background: transparent;
+    color: #1a1a1a;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #type-submit:hover { background: #f5f4f0; }
+
+  /* Feedback */
+  #feedback { min-height: 24px; font-size: 14px; font-weight: 500; padding: 7px 0 3px; }
+  .fb-correct { color: #0F6E56; }
+  .fb-wrong   { color: #993C1D; }
+
+  /* Advance notice */
+  #advance-notice {
+    font-size: 13px;
+    color: #185FA5;
+    background: #E6F1FB;
+    border-radius: 8px;
+    padding: 7px 12px;
+    margin-top: 6px;
+    display: none;
+  }
+
+  /* Next button */
+  #next-btn {
+    width: 100%;
+    padding: 11px;
+    border: 0.5px solid #ccc;
+    border-radius: 8px;
+    background: transparent;
+    color: #1a1a1a;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+    display: none;
+    transition: background 0.1s;
+  }
+  #next-btn:hover { background: #f5f4f0; }
+
+  /* Help text */
+  .help {
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+
+  /* How it works footer */
+  .how-it-works {
+    margin-top: 2rem;
+    border-top: 0.5px solid #ddd;
+    padding-top: 1rem;
+  }
+  .how-it-works h2 { font-size: 13px; font-weight: 500; color: #888; margin-bottom: 0.5rem; }
+  .how-it-works p  { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 0.4rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Cedar Rapids Street Quiz</h1>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Score</div><div class="stat-val" id="s-score">0</div></div>
+    <div class="stat"><div class="stat-label">Streak</div><div class="stat-val" id="s-streak">0</div></div>
+    <div class="stat"><div class="stat-label">Mastered</div><div class="stat-val" id="s-learned">0</div></div>
+    <div class="stat"><div class="stat-label">Mode</div><div class="stat-val" id="s-mode" style="font-size:13px;padding-top:5px;">Choice</div></div>
+  </div>
+
+  <div class="tier-row">
+    <span class="tier-badge t-major" id="tier-badge">Major roads</span>
+    <div class="prog-wrap"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+    <span class="prog-text" id="prog-text">0 / 0 mastered</span>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="question-box">
+    <div class="question-text" id="question-text">What street is highlighted in blue?</div>
+    <div class="options-grid" id="options-grid"></div>
+    <div class="type-row" id="type-row" style="display:none;">
+      <input type="text" id="type-input" placeholder="Type the street name..." autocomplete="off" />
+      <button id="type-submit">Check</button>
+    </div>
+    <div id="feedback"></div>
+    <div id="advance-notice"></div>
+    <button id="next-btn">Next street →</button>
+  </div>
+
+  <p class="help">Press Enter to submit · Press Enter again to advance</p>
+
+  <div class="how-it-works">
+    <h2>How it works</h2>
+    <p>Streets are grouped into three tiers: major, secondary, and residential. Master the major roads first before unlocking the next tier.</p>
+    <p>The quiz uses spaced repetition (SRS) — streets you struggle with appear more often. Streets you know well are spaced further apart.</p>
+    <p>Multiple choice mode is used for major and secondary roads. Type-in mode unlocks at residential level.</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─── Street data ───────────────────────────────────────────────────────────
+// Coordinates are [lat, lng] pairs forming a polyline for each street.
+const STREETS = {
+  major: [
+    { name:"1st Avenue NE",        coords:[[41.9776,-91.6740],[41.9776,-91.6640],[41.9776,-91.6540],[41.9776,-91.6440]] },
+    { name:"1st Avenue SE",        coords:[[41.9720,-91.6740],[41.9720,-91.6640],[41.9720,-91.6540]] },
+    { name:"Collins Road NE",      coords:[[42.0107,-91.7050],[42.0107,-91.6900],[42.0107,-91.6750],[42.0107,-91.6580]] },
+    { name:"Edgewood Road NW",     coords:[[42.0200,-91.7010],[42.0100,-91.7010],[41.9990,-91.7010],[41.9870,-91.7010]] },
+    { name:"Blairs Ferry Road NE", coords:[[42.0310,-91.6900],[42.0270,-91.6740],[42.0230,-91.6590],[42.0180,-91.6450]] },
+    { name:"Boyson Road NE",       coords:[[42.0440,-91.6900],[42.0440,-91.6740],[42.0440,-91.6580],[42.0440,-91.6440]] },
+    { name:"Center Point Road NE", coords:[[42.0560,-91.6520],[42.0460,-91.6545],[42.0360,-91.6565],[42.0240,-91.6585]] },
+    { name:"Mount Vernon Road SE", coords:[[41.9570,-91.6300],[41.9530,-91.6430],[41.9490,-91.6560],[41.9450,-91.6695]] },
+    { name:"C Street SW",          coords:[[41.9640,-91.6920],[41.9640,-91.6790],[41.9640,-91.6660],[41.9640,-91.6540]] },
+    { name:"Wilson Avenue SW",     coords:[[41.9700,-91.7060],[41.9700,-91.6940],[41.9700,-91.6820],[41.9700,-91.6700]] },
+    { name:"16th Avenue SW",       coords:[[41.9530,-91.6920],[41.9530,-91.6790],[41.9530,-91.6660],[41.9530,-91.6540]] },
+    { name:"8th Avenue SE",        coords:[[41.9660,-91.6600],[41.9660,-91.6510],[41.9660,-91.6420],[41.9660,-91.6330]] },
+    { name:"Diagonal Drive SW",    coords:[[41.9480,-91.7100],[41.9540,-91.6970],[41.9600,-91.6850],[41.9660,-91.6730]] },
+    { name:"Glass Road NE",        coords:[[42.0640,-91.6720],[42.0590,-91.6610],[42.0540,-91.6500],[42.0490,-91.6390]] },
+    { name:"Bowling Street SW",    coords:[[41.9480,-91.6900],[41.9480,-91.6790],[41.9480,-91.6680]] },
+  ],
+  secondary: [
+    { name:"J Street NW",              coords:[[42.0020,-91.6860],[42.0020,-91.6750],[42.0020,-91.6640]] },
+    { name:"42nd Street NE",           coords:[[41.9950,-91.6330],[41.9980,-91.6330],[42.0020,-91.6330],[42.0050,-91.6330]] },
+    { name:"Cottage Grove Avenue SE",  coords:[[41.9640,-91.6435],[41.9580,-91.6435],[41.9520,-91.6435]] },
+    { name:"Oak Drive NW",             coords:[[42.0060,-91.7025],[42.0060,-91.6920],[42.0060,-91.6815]] },
+    { name:"Wenig Road NE",            coords:[[42.0390,-91.6510],[42.0360,-91.6410],[42.0330,-91.6310]] },
+    { name:"Williams Boulevard SW",    coords:[[41.9590,-91.7090],[41.9625,-91.6985],[41.9660,-91.6880]] },
+    { name:"Wiley Boulevard SW",       coords:[[41.9540,-91.7060],[41.9570,-91.6955],[41.9600,-91.6850]] },
+    { name:"D Avenue NW",              coords:[[42.0055,-91.7005],[42.0055,-91.6895],[42.0055,-91.6785]] },
+    { name:"Bertram Road",             coords:[[41.9360,-91.6660],[41.9390,-91.6555],[41.9420,-91.6450]] },
+    { name:"Council Street NE",        coords:[[41.9900,-91.6390],[41.9930,-91.6390],[41.9960,-91.6390]] },
+    { name:"Prairie Drive NE",         coords:[[42.0480,-91.6430],[42.0510,-91.6375],[42.0545,-91.6320]] },
+    { name:"Seminole Valley Road NE",  coords:[[42.0560,-91.6810],[42.0530,-91.6730],[42.0500,-91.6650]] },
+  ],
+  residential: [
+    { name:"Elmwood Drive NW",    coords:[[41.9990,-91.6965],[42.0022,-91.6965],[42.0055,-91.6965]] },
+    { name:"Roxbury Lane NE",     coords:[[41.9980,-91.6445],[42.0000,-91.6445],[42.0022,-91.6445]] },
+    { name:"Highview Drive SE",   coords:[[41.9540,-91.6315],[41.9560,-91.6345],[41.9582,-91.6375]] },
+    { name:"Rockford Road SW",    coords:[[41.9490,-91.6975],[41.9512,-91.6935],[41.9535,-91.6895]] },
+    { name:"Brentwood Drive NE",  coords:[[42.0100,-91.6515],[42.0122,-91.6495],[42.0145,-91.6475]] },
+    { name:"Shaver Road NE",      coords:[[42.0242,-91.6465],[42.0262,-91.6445],[42.0284,-91.6425]] },
+    { name:"Stoney Point Road SW",coords:[[41.9425,-91.7045],[41.9452,-91.6985],[41.9480,-91.6925]] },
+    { name:"Meadow Court NE",     coords:[[42.0062,-91.6475],[42.0082,-91.6465],[42.0102,-91.6455]] },
+    { name:"Timber Ridge Road NW",coords:[[42.0142,-91.7005],[42.0162,-91.6985],[42.0184,-91.6965]] },
+    { name:"Glenbrook Drive SW",  coords:[[41.9572,-91.6875],[41.9552,-91.6845],[41.9532,-91.6815]] },
+    { name:"Windmill Drive SW",   coords:[[41.9432,-91.6895],[41.9454,-91.6862],[41.9476,-91.6832]] },
+    { name:"Fox Run Court NE",    coords:[[42.0312,-91.6395],[42.0334,-91.6382],[42.0354,-91.6372]] },
+  ]
+};
+
+const TIER_ORDER  = ["major","secondary","residential"];
+const TIER_LABELS = { major:"Major roads", secondary:"Secondary roads", residential:"Residential roads" };
+const TIER_BADGES = { major:"t-major", secondary:"t-secondary", residential:"t-residential" };
+const MASTERY_REQ = { major:5, secondary:4, residential:3 };
+const ROAD_COLORS = { major:"#378ADD", secondary:"#639922", residential:"#888780" };
+const ROAD_WEIGHT = { major:7, secondary:5, residential:4 };
+
+// ─── State ─────────────────────────────────────────────────────────────────
+let map, highlightLayer;
+let srs = {};
+let currentTier = "major";
+let currentStreet = null;
+let score = 0, streak = 0, mastered = 0;
+let answered = false;
+let typeMode = false;
+
+// ─── SRS helpers ───────────────────────────────────────────────────────────
+function initSRS() {
+  for (const tier of TIER_ORDER) {
+    for (const s of STREETS[tier]) {
+      srs[s.name] = { name:s.name, tier, interval:1, ease:2.5, dueAt:Date.now(), correct:0 };
+    }
+  }
+}
+
+function getTierMastery(tier) {
+  const th  = MASTERY_REQ[tier];
+  const all = STREETS[tier];
+  return { done: all.filter(s => srs[s.name].correct >= th).length, total: all.length };
+}
+
+function getNextStreet() {
+  const pool = STREETS[currentTier].map(s => srs[s.name]);
+  const now  = Date.now();
+  const due  = pool.filter(s => s.dueAt <= now);
+  const src  = due.length > 0 ? due : pool;
+  return src[Math.floor(Math.random() * src.length)];
+}
+
+function updateSRS(item, correct) {
+  const th = MASTERY_REQ[item.tier];
+  const wasMastered = item.correct >= th;
+  if (correct) {
+    item.correct++;
+    item.ease     = Math.max(1.3, item.ease + 0.1);
+    item.interval = Math.round(item.interval * item.ease);
+    if (!wasMastered && item.correct >= th) mastered++;
+  } else {
+    item.interval = 1;
+    item.ease     = Math.max(1.3, item.ease - 0.2);
+  }
+  item.dueAt = Date.now() + item.interval * 60 * 1000;
+}
+
+function checkAdvance() {
+  const m   = getTierMastery(currentTier);
+  if (m.done < m.total) return false;
+  const idx = TIER_ORDER.indexOf(currentTier);
+  if (idx < TIER_ORDER.length - 1) {
+    currentTier = TIER_ORDER[idx + 1];
+    if (currentTier === "residential") typeMode = true;
+    return true;
+  }
+  return false;
+}
+
+function getOptions(correctName) {
+  const pool = STREETS[currentTier].map(s => s.name).filter(n => n !== correctName);
+  const opts = new Set([correctName]);
+  while (opts.size < 4 && pool.length > 0) {
+    const i = Math.floor(Math.random() * pool.length);
+    opts.add(pool[i]);
+    pool.splice(i, 1);
+  }
+  return [...opts].sort(() => Math.random() - 0.5);
+}
+
+// ─── Map ───────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map("map", { zoomControl: true }).setView([41.978, -91.665], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 18
+  }).addTo(map);
+}
+
+function highlightStreet(streetObj) {
+  if (highlightLayer) map.removeLayer(highlightLayer);
+  highlightLayer = L.polyline(streetObj.coords, {
+    color:   ROAD_COLORS[currentTier],
+    weight:  ROAD_WEIGHT[currentTier],
+    opacity: 0.9
+  }).addTo(map);
+  map.fitBounds(highlightLayer.getBounds(), { padding:[80,80], maxZoom:16 });
+}
+
+// ─── UI updates ────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById("s-score").textContent   = score;
+  document.getElementById("s-streak").textContent  = streak >= 3 ? streak + " 🔥" : streak;
+  document.getElementById("s-learned").textContent = mastered;
+  document.getElementById("s-mode").textContent    = typeMode ? "Type-in" : "Choice";
+
+  const m   = getTierMastery(currentTier);
+  const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+  document.getElementById("prog-fill").style.width = pct + "%";
+  document.getElementById("prog-text").textContent = m.done + " / " + m.total + " mastered";
+
+  const badge = document.getElementById("tier-badge");
+  badge.textContent = TIER_LABELS[currentTier];
+  badge.className   = "tier-badge " + TIER_BADGES[currentTier];
+}
+
+// ─── Answer handling ───────────────────────────────────────────────────────
+function handleAnswer(chosen, correct) {
+  if (answered) return;
+  answered = true;
+
+  const isCorrect = chosen.trim().toLowerCase() === correct.trim().toLowerCase();
+  if (isCorrect) { score++; streak++; }
+  else { streak = 0; }
+
+  // Visual feedback for multiple choice
+  document.querySelectorAll(".opt-btn").forEach(btn => {
+    btn.disabled = true;
+    if (btn.dataset.val === correct)                  btn.classList.add("opt-correct");
+    else if (btn.dataset.val === chosen && !isCorrect) btn.classList.add("opt-wrong");
+  });
+
+  // Visual feedback for type-in
+  const ti = document.getElementById("type-input");
+  if (typeMode) ti.style.borderColor = isCorrect ? "#1D9E75" : "#D85A30";
+
+  const fb = document.getElementById("feedback");
+  fb.textContent = isCorrect ? "Correct!" : "It's: " + correct;
+  fb.className   = isCorrect ? "fb-correct" : "fb-wrong";
+
+  updateSRS(srs[correct], isCorrect);
+  const advanced = checkAdvance();
+  updateStats();
+
+  const notice = document.getElementById("advance-notice");
+  if (advanced) {
+    notice.textContent = "Tier unlocked: " + TIER_LABELS[currentTier] + (typeMode ? " — switching to type-in mode!" : "");
+    notice.style.display = "block";
+  } else {
+    notice.style.display = "none";
+  }
+
+  document.getElementById("next-btn").style.display = "block";
+}
+
+function handleTypeSubmit() {
+  if (answered) return;
+  const val = document.getElementById("type-input").value.trim();
+  if (!val) return;
+  handleAnswer(val, currentStreet.name);
+}
+
+// ─── Question flow ─────────────────────────────────────────────────────────
+function nextQuestion() {
+  answered = false;
+  document.getElementById("feedback").textContent    = "";
+  document.getElementById("feedback").className      = "";
+  document.getElementById("next-btn").style.display  = "none";
+  document.getElementById("advance-notice").style.display = "none";
+  document.getElementById("type-input").style.borderColor = "";
+  document.getElementById("type-input").value = "";
+
+  const srsItem   = getNextStreet();
+  currentStreet   = srsItem;
+  const streetObj = STREETS[currentTier].find(s => s.name === srsItem.name);
+  highlightStreet(streetObj);
+  updateStats();
+
+  document.getElementById("question-text").textContent = typeMode
+    ? "Type the name of the highlighted street:"
+    : "What street is highlighted in blue?";
+
+  if (typeMode) {
+    document.getElementById("options-grid").style.display = "none";
+    document.getElementById("type-row").style.display     = "flex";
+    setTimeout(() => document.getElementById("type-input").focus(), 50);
+  } else {
+    document.getElementById("options-grid").style.display = "grid";
+    document.getElementById("type-row").style.display     = "none";
+    const grid = document.getElementById("options-grid");
+    grid.innerHTML = "";
+    for (const opt of getOptions(srsItem.name)) {
+      const btn = document.createElement("button");
+      btn.className    = "opt-btn";
+      btn.textContent  = opt;
+      btn.dataset.val  = opt;
+      btn.onclick      = () => handleAnswer(opt, srsItem.name);
+      grid.appendChild(btn);
+    }
+  }
+}
+
+// ─── Event listeners ───────────────────────────────────────────────────────
+document.getElementById("next-btn").onclick      = nextQuestion;
+document.getElementById("type-submit").onclick   = handleTypeSubmit;
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    if (!answered && typeMode) { handleTypeSubmit(); return; }
+    if (answered) nextQuestion();
+  }
+});
+
+// ─── Boot ──────────────────────────────────────────────────────────────────
+initSRS();
+initMap();
+nextQuestion();
+</script>
+</body>
+</html>
