@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Street Quiz — Law Enforcement Road Trainer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f4f0; color: #1a1a1a; min-height: 100vh;
+  }
+
+  /* ── Screens ── */
+  .screen { display:none; }
+  .screen.active { display:block; }
+
+  /* ── City select screen ── */
+  #city-screen {
+    min-height: 100vh;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    gap: 1.5rem;
+  }
+  #city-screen.active { display: flex; }
+  #city-screen h1 { font-size: 1.4rem; font-weight: 600; text-align: center; }
+  #city-screen p  { font-size: 13px; color: #888; text-align: center; max-width: 360px; line-height: 1.6; }
+  .city-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 420px; }
+  .city-btn {
+    padding: 14px 12px; border: 0.5px solid #ccc; border-radius: 10px;
+    background: #fff; cursor: pointer; text-align: left; transition: border-color 0.15s;
+  }
+  .city-btn:hover { border-color: #378ADD; }
+  .city-btn .city-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+  .city-btn .city-sub  { font-size: 12px; color: #888; }
+  .city-custom { width: 100%; max-width: 420px; }
+  .city-custom h3 { font-size: 13px; color: #888; margin-bottom: 8px; }
+  .custom-row { display: flex; gap: 8px; }
+  .custom-row input {
+    flex: 1; padding: 9px 12px; border: 0.5px solid #ccc; border-radius: 8px;
+    background: #fff; font-size: 14px; outline: none;
+  }
+  .custom-row input:focus { border-color: #378ADD; }
+  .custom-row button {
+    padding: 9px 16px; border: 0.5px solid #ccc; border-radius: 8px;
+    background: transparent; cursor: pointer; font-size: 13px;
+  }
+  .custom-row button:hover { background: #f5f4f0; }
+
+  /* ── Settings panel ── */
+  #settings-screen {
+    min-height: 100vh; display: none; flex-direction: column;
+    align-items: center; justify-content: center; padding: 2rem 1rem; gap: 1rem;
+  }
+  #settings-screen.active { display: flex; }
+  #settings-screen h2 { font-size: 1.1rem; font-weight: 500; }
+  .settings-box { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1.25rem; width: 100%; max-width: 420px; }
+  .settings-box h3 { font-size: 13px; color: #888; margin-bottom: 1rem; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .setting-row:last-child { margin-bottom: 0; }
+  .setting-label { font-size: 14px; }
+  .setting-sub   { font-size: 12px; color: #aaa; margin-top: 2px; }
+  .setting-row input[type=range] { width: 120px; accent-color: #378ADD; }
+  .setting-val { font-size: 14px; font-weight: 500; min-width: 24px; text-align: right; }
+  .start-btn {
+    width: 100%; max-width: 420px; padding: 12px; border: 0.5px solid #ccc;
+    border-radius: 10px; background: #1a1a1a; color: #fff; cursor: pointer;
+    font-size: 15px; font-weight: 500;
+  }
+  .start-btn:hover { background: #333; }
+  .back-btn {
+    font-size: 13px; color: #888; background: none; border: none; cursor: pointer; margin-top: 0.5rem;
+  }
+  .back-btn:hover { color: #1a1a1a; }
+
+  /* ── Loading screen ── */
+  #loading-screen {
+    position: fixed; inset: 0; background: #f5f4f0;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1rem; z-index: 9999; padding: 2rem; text-align: center;
+  }
+  #loading-screen.active { display: flex; }
+  #loading-screen h2 { font-size: 1.1rem; font-weight: 500; }
+  #loading-screen p  { font-size: 13px; color: #888; max-width: 340px; line-height: 1.6; }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid #ddd;
+    border-top-color: #378ADD; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-error { color: #993C1D; font-size: 13px; display: none; max-width: 360px; line-height: 1.6; }
+
+  /* ── Quiz screen ── */
+  #quiz-screen { padding: 1.25rem 1rem; max-width: 680px; margin: 0 auto; }
+
+  .quiz-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .quiz-header h1 { font-size: 1rem; font-weight: 500; }
+  .header-btns { display: flex; gap: 8px; }
+  .icon-btn {
+    padding: 5px 10px; border: 0.5px solid #ccc; border-radius: 8px;
+    background: transparent; cursor: pointer; font-size: 12px; color: #666;
+  }
+  .icon-btn:hover { background: #f0f0f0; }
+
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 1rem; }
+  .stat { background:#fff; border:0.5px solid #ddd; border-radius:10px; padding:0.6rem 0.5rem; text-align:center; }
+  .stat-label { font-size:11px; color:#888; margin-bottom:3px; }
+  .stat-val { font-size:20px; font-weight:500; }
+
+  .tier-row { display:flex; align-items:center; gap:10px; margin-bottom:0.75rem; }
+  .tier-badge { padding:3px 12px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; }
+  .t-major       { background:#B5D4F4; color:#0C447C; }
+  .t-secondary   { background:#C0DD97; color:#27500A; }
+  .t-residential { background:#D3D1C7; color:#444441; }
+  .prog-wrap { flex:1; height:5px; background:#e0ddd5; border-radius:3px; }
+  .prog-fill { height:5px; background:#378ADD; border-radius:3px; transition:width 0.4s; }
+  .prog-text { font-size:12px; color:#888; white-space:nowrap; }
+
+  #map-wrap { position:relative; margin-bottom:1rem; }
+  #map { width:100%; height:400px; border-radius:12px; border:0.5px solid #ddd; }
+  #zoom-btn {
+    position:absolute; bottom:12px; right:12px; z-index:1000;
+    padding:6px 14px; background:rgba(255,255,255,0.92); border:0.5px solid #ccc;
+    border-radius:8px; font-size:12px; cursor:pointer; backdrop-filter:blur(4px);
+  }
+  #zoom-btn:hover { background:#fff; }
+
+  .question-box { background:#fff; border:0.5px solid #ddd; border-radius:12px; padding:1rem 1.25rem; margin-bottom:1rem; }
+  .question-text { font-size:14px; color:#666; margin-bottom:0.75rem; }
+
+  /* Alternate names hint */
+  .alt-names {
+    font-size: 12px; color: #aaa; margin-bottom: 0.75rem; margin-top: -0.4rem;
+    font-style: italic;
+  }
+
+  .options-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .opt-btn {
+    padding:10px 12px; border:0.5px solid #ccc; border-radius:8px;
+    background:transparent; color:#1a1a1a; cursor:pointer;
+    font-size:13px; text-align:left; line-height:1.4; transition:background 0.1s;
+  }
+  .opt-btn:hover:not(:disabled) { background:#f5f4f0; }
+  .opt-btn:disabled { cursor:default; }
+  .opt-correct { border-color:#1D9E75!important; color:#085041!important; background:#E1F5EE!important; }
+  .opt-wrong   { border-color:#D85A30!important; color:#993C1D!important; background:#FAECE7!important; }
+
+  .type-row { display:flex; gap:8px; }
+  #type-input {
+    flex:1; padding:9px 13px; border:0.5px solid #ccc; border-radius:8px;
+    background:#f5f4f0; color:#1a1a1a; font-size:14px; outline:none;
+  }
+  #type-input:focus { border-color:#378ADD; }
+  #type-submit {
+    padding:9px 18px; border:0.5px solid #ccc; border-radius:8px;
+    background:transparent; color:#1a1a1a; cursor:pointer; font-size:14px;
+  }
+  #type-submit:hover { background:#f5f4f0; }
+
+  #feedback { min-height:24px; font-size:14px; font-weight:500; padding:7px 0 3px; }
+  .fb-correct { color:#0F6E56; }
+  .fb-wrong   { color:#993C1D; }
+
+  #advance-notice {
+    font-size:13px; color:#185FA5; background:#E6F1FB;
+    border-radius:8px; padding:7px 12px; margin-top:6px; display:none;
+  }
+  #next-btn {
+    width:100%; padding:11px; border:0.5px solid #ccc; border-radius:8px;
+    background:transparent; color:#1a1a1a; cursor:pointer; font-size:14px;
+    margin-top:10px; display:none; transition:background 0.1s;
+  }
+  #next-btn:hover { background:#f5f4f0; }
+  .help { font-size:12px; color:#aaa; text-align:center; margin-top:0.5rem; margin-bottom: 2rem; }
+</style>
+</head>
+<body>
+
+<!-- ── City Selection ─────────────────────────────────────────────────── -->
+<div id="city-screen" class="active">
+  <h1>Street Quiz</h1>
+  <p>A road trainer for law enforcement. Select your city to begin.</p>
+
+  <div class="city-grid">
+    <button class="city-btn" onclick="selectCity('cedar_rapids')">
+      <div class="city-name">Cedar Rapids</div>
+      <div class="city-sub">Iowa</div>
+    </button>
+    <button class="city-btn" onclick="selectCity('austin')">
+      <div class="city-name">Austin</div>
+      <div class="city-sub">Texas</div>
+    </button>
+    <button class="city-btn" onclick="selectCity('iowa_city')">
+      <div class="city-name">Iowa City</div>
+      <div class="city-sub">Iowa</div>
+    </button>
+    <button class="city-btn" onclick="selectCity('des_moines')">
+      <div class="city-name">Des Moines</div>
+      <div class="city-sub">Iowa</div>
+    </button>
+  </div>
+
+  <div class="city-custom">
+    <h3>Or enter any city</h3>
+    <div class="custom-row">
+      <input type="text" id="custom-city-input" placeholder="e.g. Chicago, Illinois" />
+      <button onclick="selectCustomCity()">Go</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings ───────────────────────────────────────────────────────── -->
+<div id="settings-screen">
+  <h2 id="settings-title">Cedar Rapids, Iowa</h2>
+  <div class="settings-box">
+    <h3>Mastery thresholds — correct answers required per street</h3>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Major roads</div>
+        <div class="setting-sub">Highways, primary arteries</div>
+      </div>
+      <input type="range" min="3" max="20" value="10" id="thresh-major"
+             oninput="document.getElementById('val-major').textContent=this.value" />
+      <div class="setting-val" id="val-major">10</div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Secondary roads</div>
+        <div class="setting-sub">Collector streets</div>
+      </div>
+      <input type="range" min="3" max="20" value="7" id="thresh-secondary"
+             oninput="document.getElementById('val-secondary').textContent=this.value" />
+      <div class="setting-val" id="val-secondary">7</div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Residential roads</div>
+        <div class="setting-sub">Neighborhood streets</div>
+      </div>
+      <input type="range" min="2" max="15" value="5" id="thresh-residential"
+             oninput="document.getElementById('val-residential').textContent=this.value" />
+      <div class="setting-val" id="val-residential">5</div>
+    </div>
+  </div>
+  <button class="start-btn" onclick="startQuiz()">Start Quiz →</button>
+  <button class="back-btn" onclick="showScreen('city-screen')">← Change city</button>
+</div>
+
+<!-- ── Loading ────────────────────────────────────────────────────────── -->
+<div id="loading-screen">
+  <div class="spinner" id="spinner"></div>
+  <h2 id="loading-title">Loading street data…</h2>
+  <p id="loading-msg">Fetching roads from OpenStreetMap. Takes about 10 seconds on first load, then it's cached.</p>
+  <p id="loading-error"></p>
+</div>
+
+<!-- ── Quiz ───────────────────────────────────────────────────────────── -->
+<div id="quiz-screen" class="screen">
+  <div class="quiz-header">
+    <h1 id="quiz-city-label">Cedar Rapids</h1>
+    <div class="header-btns">
+      <button class="icon-btn" onclick="showScreen('settings-screen')">⚙ Settings</button>
+      <button class="icon-btn" onclick="showScreen('city-screen')">🏙 Cities</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Score</div><div class="stat-val" id="s-score">0</div></div>
+    <div class="stat"><div class="stat-label">Streak</div><div class="stat-val" id="s-streak">0</div></div>
+    <div class="stat"><div class="stat-label">Mastered</div><div class="stat-val" id="s-learned">0</div></div>
+    <div class="stat"><div class="stat-label">Mode</div><div class="stat-val" id="s-mode" style="font-size:12px;padding-top:6px;">Choice</div></div>
+  </div>
+
+  <div class="tier-row">
+    <span class="tier-badge t-major" id="tier-badge">Major roads</span>
+    <div class="prog-wrap"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+    <span class="prog-text" id="prog-text">0 / 0 mastered</span>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <button id="zoom-btn">Zoom to street ↗</button>
+  </div>
+
+  <div class="question-box">
+    <div class="question-text" id="question-text">What street is highlighted?</div>
+    <div class="alt-names" id="alt-names" style="display:none;"></div>
+    <div class="options-grid" id="options-grid"></div>
+    <div class="type-row" id="type-row" style="display:none;">
+      <input type="text" id="type-input" placeholder="Type the street name…" autocomplete="off" />
+      <button id="type-submit">Check</button>
+    </div>
+    <div id="feedback"></div>
+    <div id="advance-notice"></div>
+    <button id="next-btn">Next street →</button>
+  </div>
+
+  <p class="help">Press Enter to submit · Press Enter again to advance</p>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── City definitions ───────────────────────────────────────────────────────
+const CITIES = {
+  cedar_rapids: {
+    label: "Cedar Rapids, Iowa",
+    center: [41.978, -91.665],
+    bbox: "41.89,-91.72,42.07,-91.58",
+    // Known alternate names / highway refs for this city
+    altNames: {
+      "Avenue of the Saints":       ["I-380", "US-218"],
+      "Lincoln Highway":            ["HWY-30", "US-30"],
+      "First Avenue Northeast":     ["1st Ave NE"],
+      "Edgewood Road Northwest":    ["Edgewood Rd NW"],
+      "Collins Road Northeast":     ["Collins Rd NE"],
+      "Blairs Ferry Road":          ["Blairs Ferry Rd NE"],
+      "Center Point Road":          ["Center Point Rd NE"],
+      "Mount Vernon Road":          ["Mount Vernon Rd SE"],
+      "Boyson Road":                ["Boyson Rd NE"],
+      "Glass Road":                 ["Glass Rd NE"],
+    }
+  },
+  austin: {
+    label: "Austin, Texas",
+    center: [30.267, -97.743],
+    bbox: "30.18,-97.85,30.38,-97.65",
+    altNames: {
+      "Interstate 35 Frontage Road": ["I-35", "IH-35"],
+      "Ben White Boulevard":         ["TX-71", "US-290"],
+      "Research Boulevard":          ["US-183"],
+      "South Congress Avenue":       ["SoCo"],
+      "Cesar Chavez Street":         ["formerly 1st St"],
+      "Mo-Pac Expressway":           ["Loop 1"],
+      "Capital of Texas Highway":    ["TX-360", "Loop 360"],
+      "East Martin Luther King Jr Boulevard": ["MLK Blvd", "formerly 19th St"],
+      "William Cannon Drive":        ["William Cannon Dr"],
+      "Slaughter Lane":              ["FM-1626"],
+    }
+  },
+  iowa_city: {
+    label: "Iowa City, Iowa",
+    center: [41.660, -91.530],
+    bbox: "41.60,-91.60,41.72,-91.46",
+    altNames: {
+      "Mormon Trek Boulevard": ["formerly Willow Creek Dr"],
+      "Melrose Avenue":        ["US-218 spur"],
+      "Highway 1":             ["US-1", "Kirkwood Ave"],
+    }
+  },
+  des_moines: {
+    label: "Des Moines, Iowa",
+    center: [41.587, -93.625],
+    bbox: "41.52,-93.72,41.66,-93.53",
+    altNames: {
+      "Fleur Drive":           ["formerly Airport Rd"],
+      "Army Post Road":        ["IA-28"],
+      "Douglas Avenue":        ["US-6 West"],
+      "Hubbell Avenue":        ["US-65"],
+      "Merle Hay Road":        ["IA-415"],
+    }
+  }
+};
+
+const HW_TIER = {
+  motorway:"major", trunk:"major", primary:"major", secondary:"major",
+  tertiary:"secondary", unclassified:"secondary",
+  residential:"residential", living_street:"residential"
+};
+const TIER_ORDER  = ["major","secondary","residential"];
+const TIER_LABELS = { major:"Major roads", secondary:"Secondary roads", residential:"Residential roads" };
+const TIER_BADGES = { major:"t-major", secondary:"t-secondary", residential:"t-residential" };
+const ROAD_COLORS = { major:"#00e5ff", secondary:"#ffeb3b", residential:"#ff5722" };
+const ROAD_WEIGHT = { major:5, secondary:4, residential:3 };
+const TIER_LIMIT  = 15;
+
+// ── State ──────────────────────────────────────────────────────────────────
+let map, highlightLayer;
+let streetCoords = {}, streetTiers = { major:[], secondary:[], residential:[] };
+let altNameMap   = {};
+let srs = {};
+let MASTERY_REQ  = { major:10, secondary:7, residential:5 };
+let currentCity  = null;
+let currentTier  = "major", currentStreet = null;
+let score = 0, streak = 0, mastered = 0;
+let answered = false, typeMode = false;
+let currentBounds = null;
+
+// ── Screen management ──────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll(".screen, #city-screen, #settings-screen, #loading-screen")
+    .forEach(el => { el.classList.remove("active"); el.style.display=""; });
+  const el = document.getElementById(id);
+  el.classList.add("active");
+  if (id === "quiz-screen") el.style.display = "block";
+}
+
+function selectCity(cityKey) {
+  currentCity = CITIES[cityKey];
+  currentCity.key = cityKey;
+  document.getElementById("settings-title").textContent = currentCity.label;
+  showScreen("settings-screen");
+}
+
+function selectCustomCity() {
+  const val = document.getElementById("custom-city-input").value.trim();
+  if (!val) return;
+  // Parse "City, State" into a geocodable string and build a rough bbox
+  currentCity = {
+    label: val,
+    key: "custom_" + val.replace(/\s/g,"_").toLowerCase(),
+    center: null,   // will be derived from OSM data
+    bbox: null,     // will be set after geocoding
+    altNames: {}
+  };
+  geocodeAndProceed(val);
+}
+
+async function geocodeAndProceed(cityName) {
+  showScreen("loading-screen");
+  document.getElementById("loading-title").textContent = "Finding " + cityName + "…";
+  try {
+    const r = await fetch(
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" +
+      encodeURIComponent(cityName)
+    );
+    const j = await r.json();
+    if (!j.length) throw new Error("City not found. Try a more specific name like 'Chicago, Illinois'.");
+    const place = j[0];
+    const bb = place.boundingbox; // [south, north, west, east]
+    currentCity.center = [parseFloat(place.lat), parseFloat(place.lon)];
+    currentCity.bbox   = `${bb[0]},${bb[2]},${bb[1]},${bb[3]}`;
+    document.getElementById("settings-title").textContent = currentCity.label;
+    showScreen("settings-screen");
+  } catch(err) {
+    document.getElementById("loading-error").style.display = "block";
+    document.getElementById("loading-error").textContent   = "Error: " + err.message;
+    document.getElementById("spinner").style.display       = "none";
+    document.getElementById("loading-title").textContent   = "Something went wrong";
+  }
+}
+
+function startQuiz() {
+  MASTERY_REQ = {
+    major:       parseInt(document.getElementById("thresh-major").value),
+    secondary:   parseInt(document.getElementById("thresh-secondary").value),
+    residential: parseInt(document.getElementById("thresh-residential").value),
+  };
+  score = 0; streak = 0; mastered = 0; answered = false; typeMode = false;
+  currentTier = "major";
+  document.getElementById("quiz-city-label").textContent = currentCity.label;
+  loadAndRun();
+}
+
+// ── Segment joining ────────────────────────────────────────────────────────
+function joinSegments(segments) {
+  if (!segments.length) return [];
+  if (segments.length === 1) return segments[0];
+  const segs = segments.map(s => s.slice());
+  const joined = [segs.shift()];
+  let maxPasses = segs.length * 2;
+  while (segs.length > 0 && maxPasses-- > 0) {
+    const current = joined[joined.length - 1];
+    const tail    = current[current.length - 1];
+    let matched   = false;
+    for (let i = 0; i < segs.length; i++) {
+      const seg  = segs[i];
+      const same = (a,b) => Math.abs(a[0]-b[0])<0.00005 && Math.abs(a[1]-b[1])<0.00005;
+      if (same(tail, seg[0])) {
+        current.push(...seg.slice(1)); segs.splice(i,1); matched=true; break;
+      }
+      if (same(tail, seg[seg.length-1])) {
+        current.push(...seg.slice(0,-1).reverse()); segs.splice(i,1); matched=true; break;
+      }
+    }
+    if (!matched) joined.push(segs.shift());
+  }
+  return joined.reduce((a,b) => b.length>a.length?b:a);
+}
+
+// ── OSM data ───────────────────────────────────────────────────────────────
+async function fetchOSM(bbox) {
+  const query = `[out:json][timeout:40];(way["highway"]["name"](${bbox}););out geom;`;
+  const r = await fetch("https://overpass-api.de/api/interpreter", {
+    method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:"data="+encodeURIComponent(query)
+  });
+  if (!r.ok) throw new Error("Overpass HTTP " + r.status);
+  const j = await r.json();
+  if (!Array.isArray(j.elements)) throw new Error("Bad response from Overpass");
+  return j.elements;
+}
+
+function buildData(elements, cityAltNames) {
+  const byName = {};
+  for (const el of elements) {
+    if (el.type!=="way"||!el.tags||!el.tags.name||!el.tags.highway||!el.geometry) continue;
+    const tier = HW_TIER[el.tags.highway]; if (!tier) continue;
+    const name = el.tags.name.trim();
+    if (!byName[name]) byName[name] = { tier, segs:[], ref: el.tags.ref||null };
+    if (el.geometry.length>1) byName[name].segs.push(el.geometry.map(p=>[p.lat,p.lon]));
+  }
+  const buckets = { major:{}, secondary:{}, residential:{} };
+  const alts    = {};
+  for (const [name,info] of Object.entries(byName)) {
+    if (!info.segs.length) continue;
+    const coords = joinSegments(info.segs);
+    buckets[info.tier][name] = { coords, segCount:info.segs.length };
+    // Build alt names: combine OSM ref tags + our manual lookup
+    const altList = [];
+    if (info.ref) altList.push(...info.ref.split(";").map(s=>s.trim()));
+    if (cityAltNames[name]) altList.push(...cityAltNames[name]);
+    if (altList.length) alts[name] = [...new Set(altList)];
+  }
+  const result = { streets:{}, tiers:{ major:[], secondary:[], residential:[] }, alts };
+  for (const tier of TIER_ORDER) {
+    const sorted = Object.entries(buckets[tier])
+      .sort((a,b)=>b[1].segCount-a[1].segCount).slice(0,TIER_LIMIT);
+    for (const [name,info] of sorted) {
+      result.streets[name] = info.coords;
+      result.tiers[tier].push(name);
+    }
+  }
+  return result;
+}
+
+async function loadData(city) {
+  const cacheKey = "osm_v6_" + city.key;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p&&p.streets&&Object.keys(p.streets).length>5) return p;
+    }
+  } catch(e) {}
+  const els  = await fetchOSM(city.bbox);
+  const data = buildData(els, city.altNames || {});
+  try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch(e) {}
+  return data;
+}
+
+// ── SRS ────────────────────────────────────────────────────────────────────
+function initSRS() {
+  srs = {};
+  for (const tier of TIER_ORDER)
+    for (const name of streetTiers[tier])
+      srs[name] = { name, tier, interval:1, ease:2.5, dueAt:Date.now(), correct:0 };
+}
+
+function getTierMastery(tier) {
+  const th=MASTERY_REQ[tier], all=streetTiers[tier];
+  return { done:all.filter(n=>srs[n]&&srs[n].correct>=th).length, total:all.length };
+}
+
+function getNextStreet() {
+  const pool=streetTiers[currentTier].filter(n=>srs[n]).map(n=>srs[n]);
+  const now=Date.now(), due=pool.filter(s=>s.dueAt<=now);
+  const src=due.length>0?due:pool;
+  return src[Math.floor(Math.random()*src.length)];
+}
+
+function applyResult(item, correct) {
+  const th=MASTERY_REQ[item.tier], was=item.correct>=th;
+  if (correct) {
+    item.correct++; item.ease=Math.max(1.3,item.ease+0.1);
+    item.interval=Math.round(item.interval*item.ease);
+    if (!was&&item.correct>=th) mastered++;
+  } else { item.interval=1; item.ease=Math.max(1.3,item.ease-0.2); }
+  item.dueAt=Date.now()+item.interval*60*1000;
+}
+
+function checkAdvance() {
+  const m=getTierMastery(currentTier); if(m.done<m.total) return false;
+  const idx=TIER_ORDER.indexOf(currentTier);
+  if (idx<TIER_ORDER.length-1) {
+    currentTier=TIER_ORDER[idx+1];
+    if (currentTier==="residential") typeMode=true;
+    return true;
+  }
+  return false;
+}
+
+function getOptions(correct) {
+  const pool=streetTiers[currentTier].filter(n=>n!==correct&&srs[n]);
+  const opts=new Set([correct]);
+  while(opts.size<4&&pool.length>0){const i=Math.floor(Math.random()*pool.length);opts.add(pool[i]);pool.splice(i,1);}
+  return [...opts].sort(()=>Math.random()-0.5);
+}
+
+// ── Map ────────────────────────────────────────────────────────────────────
+function initMap(center) {
+  if (map) { map.remove(); map = null; }
+  map = L.map("map", { zoomAnimation:false }).setView(center, 12);
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution:"Tiles © Esri", maxZoom:19, keepBuffer:8 }
+  ).addTo(map);
+}
+
+function highlight(name) {
+  if (highlightLayer) map.removeLayer(highlightLayer);
+  const coords = streetCoords[name]; if (!coords||coords.length<2) return;
+  map.setView(currentCity.center, 12, { animate:false });
+  highlightLayer = L.polyline(coords, {
+    color:ROAD_COLORS[currentTier], weight:ROAD_WEIGHT[currentTier], opacity:1.0
+  }).addTo(map);
+  currentBounds = highlightLayer.getBounds();
+}
+
+function zoomToStreet() {
+  if (!currentBounds) return;
+  map.fitBounds(currentBounds, { padding:[50,50], maxZoom:15 });
+}
+
+// ── UI ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById("s-score").textContent   = score;
+  document.getElementById("s-streak").textContent  = streak>=3?streak+" 🔥":streak;
+  document.getElementById("s-learned").textContent = mastered;
+  document.getElementById("s-mode").textContent    = typeMode?"Type-in":"Choice";
+  const m=getTierMastery(currentTier), pct=m.total>0?Math.round(m.done/m.total*100):0;
+  document.getElementById("prog-fill").style.width = pct+"%";
+  document.getElementById("prog-text").textContent = m.done+" / "+m.total+" mastered";
+  const b=document.getElementById("tier-badge");
+  b.textContent=TIER_LABELS[currentTier]; b.className="tier-badge "+TIER_BADGES[currentTier];
+}
+
+function showAltNames(name) {
+  const el  = document.getElementById("alt-names");
+  const alt = altNameMap[name];
+  if (alt && alt.length) {
+    el.textContent = "Also known as: " + alt.join(", ");
+    el.style.display = "block";
+  } else {
+    el.style.display = "none";
+  }
+}
+
+function handleAnswer(chosen, correct) {
+  if(answered) return; answered=true;
+  const ok=chosen.trim().toLowerCase()===correct.trim().toLowerCase();
+  if(ok){score++;streak++;}else{streak=0;}
+  document.querySelectorAll(".opt-btn").forEach(b=>{
+    b.disabled=true;
+    if(b.dataset.val===correct) b.classList.add("opt-correct");
+    else if(b.dataset.val===chosen&&!ok) b.classList.add("opt-wrong");
+  });
+  if(typeMode) document.getElementById("type-input").style.borderColor=ok?"#1D9E75":"#D85A30";
+  const fb=document.getElementById("feedback");
+  fb.textContent=ok?"Correct!":"It's: "+correct; fb.className=ok?"fb-correct":"fb-wrong";
+  // Show alternate names after answering
+  showAltNames(correct);
+  applyResult(srs[correct],ok);
+  const adv=checkAdvance(); updateStats();
+  const n=document.getElementById("advance-notice");
+  if(adv){n.textContent="Tier unlocked: "+TIER_LABELS[currentTier]+(typeMode?" — switching to type-in mode!":"");n.style.display="block";}
+  else n.style.display="none";
+  document.getElementById("next-btn").style.display="block";
+}
+
+function handleTypeSubmit() {
+  if(answered) return;
+  const v=document.getElementById("type-input").value.trim(); if(!v) return;
+  handleAnswer(v,currentStreet.name);
+}
+
+function nextQuestion() {
+  answered=false;
+  document.getElementById("feedback").textContent="";
+  document.getElementById("feedback").className="";
+  document.getElementById("advance-notice").style.display="none";
+  document.getElementById("next-btn").style.display="none";
+  document.getElementById("type-input").style.borderColor="";
+  document.getElementById("type-input").value="";
+  document.getElementById("alt-names").style.display="none";
+
+  const s=getNextStreet(); currentStreet=s;
+  highlight(s.name); updateStats();
+
+  document.getElementById("question-text").textContent = typeMode
+    ?"Type the name of the highlighted street:":"What street is highlighted?";
+
+  if(typeMode){
+    document.getElementById("options-grid").style.display="none";
+    document.getElementById("type-row").style.display="flex";
+    setTimeout(()=>document.getElementById("type-input").focus(),50);
+  } else {
+    document.getElementById("options-grid").style.display="grid";
+    document.getElementById("type-row").style.display="none";
+    const grid=document.getElementById("options-grid"); grid.innerHTML="";
+    for(const opt of getOptions(s.name)){
+      const btn=document.createElement("button");
+      btn.className="opt-btn"; btn.textContent=opt; btn.dataset.val=opt;
+      btn.onclick=()=>handleAnswer(opt,s.name); grid.appendChild(btn);
+    }
+  }
+}
+
+// ── Load and run ───────────────────────────────────────────────────────────
+async function loadAndRun() {
+  showScreen("loading-screen");
+  document.getElementById("loading-title").textContent = "Loading " + currentCity.label + "…";
+  document.getElementById("loading-error").style.display = "none";
+  document.getElementById("spinner").style.display = "block";
+  try {
+    const data      = await loadData(currentCity);
+    streetCoords    = data.streets;
+    streetTiers     = data.tiers;
+    altNameMap      = data.alts || {};
+    if (Object.keys(streetCoords).length===0)
+      throw new Error("No streets returned. Try refreshing.");
+    // Derive center from data if custom city
+    if (!currentCity.center) {
+      const allCoords = Object.values(streetCoords).flat();
+      const lat = allCoords.reduce((s,c)=>s+c[0],0)/allCoords.length;
+      const lng = allCoords.reduce((s,c)=>s+c[1],0)/allCoords.length;
+      currentCity.center = [lat, lng];
+    }
+    initSRS();
+    showScreen("quiz-screen");
+    initMap(currentCity.center);
+    map.invalidateSize();
+    nextQuestion();
+  } catch(err) {
+    document.getElementById("spinner").style.display="none";
+    document.getElementById("loading-title").textContent="Something went wrong";
+    document.getElementById("loading-msg").textContent="";
+    const e=document.getElementById("loading-error");
+    e.style.display="block";
+    e.textContent="Error: "+err.message;
+  }
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────
+document.getElementById("next-btn").onclick    = nextQuestion;
+document.getElementById("type-submit").onclick = handleTypeSubmit;
+document.getElementById("zoom-btn").onclick    = zoomToStreet;
+document.getElementById("custom-city-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") selectCustomCity();
+});
+document.addEventListener("keydown", e => {
+  if (document.getElementById("quiz-screen").style.display !== "block") return;
+  if (e.key==="Enter"){
+    if(!answered&&typeMode){handleTypeSubmit();return;}
+    if(answered) nextQuestion();
+  }
+});
+</script>
+</body>
+</html>
